@@ -39,8 +39,55 @@ int main(int argc, char** argv)
         std::cerr << "Failed to read input JPEG image\n";
         return -1;
     }
-    /**
-     * TODO: OpenACC PartC
-     */
+
+
+    int width = input_jpeg.width;
+    int height = input_jpeg.height;
+    int num_channels = input_jpeg.num_channels;
+    
+    JpegSOA output_jpeg(width, height, num_channels);
+    
+    #pragma acc parallel loop collapse(3) present(input_jpeg, output_jpeg)
+    for (int c = 0; c < num_channels; c++)
+    {
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                float sum = 0.0f;
+                float weight_sum = 0.0f;
+                float center_value = input_jpeg.get_pixel(x, y, c);
+                
+                for (int j = -1; j <= 1; j++)
+                {
+                    for (int i = -1; i <= 1; i++)
+                    {
+                        int neighbor_x = x + i;
+                        int neighbor_y = y + j;
+                        
+                        if (neighbor_x >= 0 && neighbor_x < width && neighbor_y >= 0 && neighbor_y < height)
+                        {
+                            float neighbor_value = input_jpeg.get_pixel(neighbor_x, neighbor_y, c);
+                            float spatial_distance = std::sqrt(i * i + j * j);
+                            float intensity_distance = std::abs(center_value - neighbor_value);
+                            float weight = std::exp(-spatial_distance / 2.0f) * std::exp(-intensity_distance / 2.0f);
+                            
+                            sum += neighbor_value * weight;
+                            weight_sum += weight;
+                        }
+                    }
+                }
+                
+                float filtered_value = sum / weight_sum;
+                output_jpeg.set_pixel(x, y, c, filtered_value);
+            }
+        }
+    }
+    
+    // Write JPEG File
+    const char* output_filename = argv[2];
+    std::cout << "Output file to: " << output_filename << "\n";
+    write_jpeg_soa(output_filename, output_jpeg);
+    
     return 0;
 }
