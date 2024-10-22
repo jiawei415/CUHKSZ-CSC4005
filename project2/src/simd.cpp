@@ -25,6 +25,28 @@ Matrix matrix_multiply_simd(const Matrix& matrix1, const Matrix& matrix2) {
     // In addition to Memory Locality and Cache Missing,
     // Further Applying SIMD
 
+    // Set the tile size
+    const size_t tile_size = 32;
+
+    // Iterate over the tiles
+    for (int i = 0; i < M; i += tile_size) {
+        for (int j = 0; j < N; j += tile_size) {
+            for (int k = 0; k < K; k += tile_size) {
+                // Perform SIMD matrix multiplication on the current tile
+                for (int ii = i; ii < std::min(i + tile_size, M); ii++) {
+                    for (int jj = j; jj < std::min(j + tile_size, N); jj += 8) {
+                        __m256d sum = _mm256_setzero_pd();
+                        for (int kk = k; kk < std::min(k + tile_size, K); kk++) {
+                            __m256d a = _mm256_loadu_pd(&matrix1(ii, kk));
+                            __m256d b = _mm256_broadcast_sd(&matrix2(kk, jj));
+                            sum = _mm256_fmadd_pd(a, b, sum);
+                        }
+                        _mm256_storeu_pd(&result(ii, jj), sum);
+                    }
+                }
+            }
+        }
+    }
     return result;
 }
 

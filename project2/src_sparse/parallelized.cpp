@@ -12,6 +12,8 @@
 /**    Your code is here    **/
 /*****************************/
 
+
+
 SparseMatrix matrix_multiply(const SparseMatrix& A, const SparseMatrix& B) {
     if (A.n_col_ != B.n_row_) {
         throw std::invalid_argument("Matrix dimensions are not compatible for multiplication.");
@@ -19,9 +21,18 @@ SparseMatrix matrix_multiply(const SparseMatrix& A, const SparseMatrix& B) {
 
     SparseMatrix C;
 
-    /*****************************/
-    /**    Your code is here    **/
-    /*****************************/
+    // Perform sparse matrix multiplication
+    for (int i = 0; i < A.n_row_; ++i) {
+        for (int j = 0; j < B.n_col_; ++j) {
+            int sum = 0;
+            for (int k = 0; k < A.n_col_; ++k) {
+                sum += A.get(i, k) * B.get(k, j);
+            }
+            if (sum != 0) {
+                C.set(i, j, sum);
+            }
+        }
+    }
 
     return C;
 }
@@ -69,6 +80,12 @@ int main(int argc, char** argv) {
 
         // Your Code Here for Synchronization!
 
+        for (int i = 1; i < numtasks; i++) {
+            double* buffer = new double[result.getNnz()];
+            MPI_Recv(buffer, result.getNnz(), MPI_DOUBLE, i, 0, MPI_COMM_WORLD, &status);
+            result.add(buffer);
+        }
+
         auto end_time = std::chrono::high_resolution_clock::now();
         auto elapsed_time =
                 std::chrono::duration_cast<std::chrono::milliseconds>(end_time -
@@ -85,6 +102,8 @@ int main(int argc, char** argv) {
         SparseMatrix result = matrix_multiply(matrix1, matrix2);
 
         // Your Code Here for Synchronization!
+
+        MPI_Send(result.getData(), result.getNnz(), MPI_DOUBLE, MASTER, 0, MPI_COMM_WORLD);
     }
 
     MPI_Finalize();

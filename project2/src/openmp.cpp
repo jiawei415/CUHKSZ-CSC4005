@@ -26,6 +26,32 @@ Matrix matrix_multiply_openmp(const Matrix& matrix1, const Matrix& matrix2) {
     // In addition to SIMD, Memory Locality and Cache Missing,
     // Further Applying OpenMp
 
+    // Set the tile size
+    const size_t tile_size = 32;
+
+    // Perform tiled matrix multiplication
+    #pragma omp parallel for collapse(2)
+    for (size_t i = 0; i < M; i += tile_size) {
+        for (size_t j = 0; j < N; j += tile_size) {
+            for (size_t k = 0; k < K; k += tile_size) {
+                for (size_t ii = i; ii < std::min(i + tile_size, M); ii++) {
+                    for (size_t jj = j; jj < std::min(j + tile_size, N); jj++) {
+                        __m256d sum = _mm256_setzero_pd();
+                        for (size_t kk = k; kk < std::min(k + tile_size, K); kk += 4) {
+                            __m256d a = _mm256_loadu_pd(&matrix1(ii, kk));
+                            __m256d b = _mm256_loadu_pd(&matrix2(kk, jj));
+                            sum = _mm256_add_pd(sum, _mm256_mul_pd(a, b));
+                        }
+                        double temp[4];
+                        _mm256_storeu_pd(temp, sum);
+                        for (size_t kk = 0; kk < 4; kk++) {
+                            result(ii, jj) += temp[kk];
+                        }
+                    }
+                }
+            }
+        }
+    }
     return result;
 }
 

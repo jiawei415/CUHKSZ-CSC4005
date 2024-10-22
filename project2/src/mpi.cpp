@@ -14,7 +14,10 @@
 
 #define MASTER 0
 
-Matrix matrix_multiply_mpi(const Matrix& matrix1, const Matrix& matrix2) {
+#include <iostream>
+#include <cstring>
+
+Matrix matrix_multiply_mpi(const Matrix& matrix1, const Matrix& matrix2, int numtasks, int taskid) {
     if (matrix1.getCols() != matrix2.getRows()) {
         throw std::invalid_argument(
             "Matrix dimensions are not compatible for multiplication.");
@@ -24,13 +27,36 @@ Matrix matrix_multiply_mpi(const Matrix& matrix1, const Matrix& matrix2) {
 
     Matrix result(M, N);
 
-    // Your Code Here!
-    // Optimizing Matrix Multiplication 
-    // In addition to OpenMP, SIMD, Memory Locality and Cache Missing,
-    // Further Applying MPI
-    // Note:
-    // You can change the argument of the function 
-    // for your convenience of task division
+    int tile_size = M / numtasks;
+    int tile_start = taskid * tile_size;
+    int tile_end = (taskid == numtasks - 1) ? M : (taskid + 1) * tile_size;
+
+    // Perform tiled matrix multiplication
+    for (int i = tile_start; i < tile_end; i++) {
+        for (int j = 0; j < N; j++) {
+            __m256d sum = _mm256_setzero_pd();
+            for (int k = 0; k < K; k += 4) {
+                __m256d a = _mm256_loadu_pd(&matrix1(i, k));
+                __m256d b = _mm256_broadcast_sd(&matrix2(k, j));
+                sum = _mm256_add_pd(sum, _mm256_mul_pd(a, b));
+            }
+            double temp[4];
+            _mm256_storeu_pd(temp, sum);
+            for (int k = 0; k < 4; k++) {
+                result(i, j) += temp[k];
+            }
+        }
+    }
+
+    // // Synchronize the results
+    // if (numtasks > 1) {
+    //     double* sendbuf = result.getData();
+    //     double* recvbuf = new double[M * N];
+    //     std::memcpy(recvbuf, sendbuf, M * N * sizeof(double));
+    //     MPI_Allreduce(sendbuf, recvbuf, M * N, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    //     std::memcpy(sendbuf, recvbuf, M * N * sizeof(double));
+    //     delete[] recvbuf;
+    // }
 
     return result;
 }
@@ -73,9 +99,15 @@ int main(int argc, char** argv) {
 
     auto start_time = std::chrono::high_resolution_clock::now();
     if (taskid == MASTER) {
-        Matrix result = matrix_multiply_mpi(matrix1, matrix2);
+        Matrix result = matrix_multiply_mpi(matrix1, matrix2, numtasks, taskid);
 
         // Your Code Here for Synchronization!
+
+        for (int i = 1; i < numtasks; i++) {
+            Matrix temp(M, N);
+            MPI_Recv(temp.getData(), M * N, MPI_DOUBLE, i, 0, MPI_COMM_WORLD, &status);
+            result += temp;
+        }
 
         auto end_time = std::chrono::high_resolution_clock::now();
         auto elapsed_time =
@@ -90,9 +122,12 @@ int main(int argc, char** argv) {
         std::cout << "Execution Time: " << elapsed_time.count()
                   << " milliseconds" << std::endl;
     } else {
-        Matrix result = matrix_multiply_mpi(matrix1, matrix2);
+        Matrix result = matrix_multiply_mpi(matrix1, matrix2, numtasks, taskid);
 
         // Your Code Here for Synchronization!
+
+        MPI_Send(result.getData(), M * N, MPI_DOUBLE, MASTER, 0, MPI_COMM_WORLD);
+
     }
 
     MPI_Finalize();

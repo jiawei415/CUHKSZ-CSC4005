@@ -26,6 +26,25 @@ Matrix matrix_multiply_locality(const Matrix& matrix1, const Matrix& matrix2) {
     // 1. Change the order of the tripple nested loop
     // 2. Apply Tiled Matrix Multiplication
 
+    // Tiled Matrix Multiplication
+    // Define the tile size
+    const size_t tile_size = 32;
+
+    for (size_t i = 0; i < M; i += tile_size) {
+        for (size_t j = 0; j < N; j += tile_size) {
+            for (size_t k = 0; k < K; k += tile_size) {
+                // Compute the tile multiplication
+                for (size_t ii = i; ii < std::min(i + tile_size, M); ++ii) {
+                    for (size_t jj = j; jj < std::min(j + tile_size, N); ++jj) {
+                        for (size_t kk = k; kk < std::min(k + tile_size, K); ++kk) {
+                            result(ii, jj) += matrix1(ii, kk) * matrix2(kk, jj);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     return result;
 }
 
